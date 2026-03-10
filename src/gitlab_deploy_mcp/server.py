@@ -571,19 +571,19 @@ def _render_compose(
     service = app_name
 
     rule = f"Host(`{host}`) && PathPrefix(`{path_prefix}`)"
-
     labels = [
         "- \"traefik.enable=true\"",
         f"- \"traefik.docker.network={traefik_network}\"",
         f"- \"traefik.http.routers.{router}.entrypoints={traefik_entrypoint}\"",
         f"- \"traefik.http.routers.{router}.rule={rule}\"",
-        f"- \"traefik.http.services.{service}.loadbalancer.server.port={internal_port}\"",
+        f"- \"traefik.http.routers.{router}.tls=true\"",
     ]
 
     if path_prefix != "/":
         middleware_name = f"{app_name}-stripprefix"
         labels.append(f"- \"traefik.http.routers.{router}.middlewares={middleware_name}\"")
         labels.append(f"- \"traefik.http.middlewares.{middleware_name}.stripprefix.prefixes={path_prefix}\"")
+    labels.append(f"- \"traefik.http.services.{service}.loadbalancer.server.port={internal_port}\"")
 
     env_lines = []
     if env_vars:
