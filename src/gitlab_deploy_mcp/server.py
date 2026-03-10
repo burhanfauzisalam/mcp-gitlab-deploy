@@ -22,9 +22,147 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.transport_security import TransportSecuritySettings
+except ImportError:
+    TransportSecuritySettings = None  # type: ignore[assignment]
+
+
+def _parse_env_csv(name: str) -> list[str]:
+    """Parse env comma-separated list menjadi list bersih."""
+    raw_value = os.getenv(name, "")
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
+
+
+def _parse_env_bool(name: str) -> bool | None:
+    """Parse env bool; return None jika tidak diisi."""
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+
+    normalized = raw_value.strip().lower()
+    if normalized in ("1", "true", "yes", "y", "on"):
+        return True
+    if normalized in ("0", "false", "no", "n", "off"):
+        return False
+    return None
+
+
+def _unique_preserve(values: list[str]) -> list[str]:
+    """Hilangkan duplikat tanpa mengubah urutan awal."""
+    seen: set[str] = set()
+    unique_values: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique_values.append(value)
+    return unique_values
+
+
+def _extract_host_from_domain(value: str) -> str:
+    """Ambil host/domain dari MAIN_DOMAIN (boleh berformat URL)."""
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+
+    parsed = urlsplit(cleaned if "://" in cleaned else f"https://{cleaned}")
+    host = parsed.netloc or parsed.path
+    host = host.strip().strip("/")
+    if host.startswith("[") and "]" in host:
+        return host
+    if ":" in host:
+        return host.split(":", 1)[0]
+    return host
+
+
+def _normalize_host_entry(value: str) -> str:
+    """Normalisasi value host allowlist agar konsisten untuk middleware."""
+    cleaned = value.strip().strip("/")
+    if not cleaned:
+        return ""
+
+    if "://" in cleaned:
+        parsed = urlsplit(cleaned)
+        host = parsed.netloc.strip()
+    else:
+        host = cleaned
+
+    if not host:
+        return ""
+
+    if host.startswith("["):
+        if "]:" in host:
+            return host
+        if host.endswith("]"):
+            return f"{host}:*"
+        return host
+
+    return host if ":" in host else f"{host}:*"
+
+
+def _build_transport_security() -> Any:
+    """Bangun konfigurasi transport security dari environment.
+
+    Tujuan:
+    - Mengizinkan Host header domain publik (mis. lewat Traefik) agar tidak 421.
+    - Tetap mempertahankan proteksi DNS rebinding bila domain/allowlist tersedia.
+    """
+    if TransportSecuritySettings is None:
+        return None
+
+    main_domain = _extract_host_from_domain(os.getenv("MAIN_DOMAIN", ""))
+
+    configured_hosts: list[str] = []
+    if main_domain:
+        configured_hosts.extend([main_domain, f"{main_domain}:*"])
+
+    configured_hosts.extend(
+        host
+        for host in (_normalize_host_entry(item) for item in _parse_env_csv("MCP_ALLOWED_HOSTS"))
+        if host
+    )
+
+    explicit_enable = _parse_env_bool("MCP_ENABLE_DNS_REBINDING_PROTECTION")
+    enable_protection = explicit_enable if explicit_enable is not None else bool(configured_hosts)
+
+    if not enable_protection:
+        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+
+    safe_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    allowed_hosts = _unique_preserve(safe_hosts + configured_hosts)
+
+    configured_origins = _parse_env_csv("MCP_ALLOWED_ORIGINS")
+    if main_domain:
+        configured_origins.extend(
+            [
+                f"https://{main_domain}",
+                f"https://{main_domain}:*",
+                f"http://{main_domain}",
+                f"http://{main_domain}:*",
+            ]
+        )
+    safe_origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+    allowed_origins = _unique_preserve(safe_origins + configured_origins)
+
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
+_transport_security = _build_transport_security()
 
 # Objek server MCP utama yang meregistrasikan seluruh tool.
-mcp = FastMCP("gitlab-deploy-mcp")
+try:
+    if _transport_security is None:
+        mcp = FastMCP("gitlab-deploy-mcp")
+    else:
+        mcp = FastMCP("gitlab-deploy-mcp", transport_security=_transport_security)
+except TypeError:
+    # Fallback untuk versi SDK yang belum mendukung argumen `transport_security`.
+    mcp = FastMCP("gitlab-deploy-mcp")
 # Root default untuk hasil deployment app target (bisa dioverride env).
 DEFAULT_DEPLOYMENT_ROOT = os.getenv("GITLAB_DEPLOYMENT_ROOT", "./deployments")
 

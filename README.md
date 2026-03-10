@@ -108,6 +108,8 @@ Variable penting untuk deploy:
 - `TRAEFIK_NETWORK` (default `web`), `TRAEFIK_ENTRYPOINT` (default `websecure`), `MAIN_DOMAIN`
 - `GITLAB_DEPLOYMENT_ROOT`, `DEPLOYMENT_DATA_DIR`
 - `GITLAB_ACCESS_TOKEN` (opsional, untuk default clone repo private oleh tool runtime)
+- `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` (opsional, allowlist Host/Origin untuk endpoint MCP)
+- `MCP_ENABLE_DNS_REBINDING_PROTECTION` (opsional, `true/false`)
 
 Panduan detail variable dan flow ada di [docs/GITHUB_CICD.md](./docs/GITHUB_CICD.md).
 
