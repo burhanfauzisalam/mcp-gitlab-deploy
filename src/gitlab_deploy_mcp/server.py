@@ -9,6 +9,7 @@ File ini berisi:
 """
 
 import argparse
+import base64
 import inspect
 import json
 import os
@@ -330,6 +331,132 @@ def _read_text_if_exists(file_path: Path) -> str:
         return file_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return ""
+
+
+def _build_public_base_url(host: str, path_prefix: str) -> str:
+    """Bangun URL publik aplikasi berdasarkan host + path prefix Traefik."""
+    if path_prefix == "/":
+        return f"https://{host}"
+    return f"https://{host}{path_prefix}"
+
+
+def _generate_laravel_app_key() -> str:
+    """Generate APP_KEY Laravel (base64-encoded random 32 bytes)."""
+    random_bytes = os.urandom(32)
+    encoded = base64.b64encode(random_bytes).decode("ascii")
+    return f"base64:{encoded}"
+
+
+def _build_default_env_vars(
+    detection: dict[str, Any],
+    app_name: str,
+    host: str,
+    path_prefix: str,
+) -> dict[str, str]:
+    """Bangun default env vars berdasarkan stack/framework yang terdeteksi."""
+    framework = str(detection.get("framework", "unknown")).lower()
+    stack = str(detection.get("stack", "unknown")).lower()
+    internal_port = str(detection.get("internal_port", "")).strip()
+    public_url = _build_public_base_url(host=host, path_prefix=path_prefix)
+
+    if framework == "laravel":
+        return {
+            "APP_NAME": app_name,
+            "APP_ENV": "production",
+            "APP_KEY": _generate_laravel_app_key(),
+            "APP_DEBUG": "false",
+            "APP_URL": public_url,
+            "LOG_CHANNEL": "stack",
+            "LOG_LEVEL": "info",
+            "CACHE_STORE": "file",
+            "SESSION_DRIVER": "file",
+            "QUEUE_CONNECTION": "sync",
+        }
+
+    if framework == "codeigniter4":
+        return {
+            "CI_ENVIRONMENT": "production",
+            "app.baseURL": f"{public_url}/",
+        }
+
+    if framework == "codeigniter3":
+        return {
+            "CI_ENV": "production",
+            "BASE_URL": f"{public_url}/",
+        }
+
+    if stack == "nodejs":
+        return {
+            "NODE_ENV": "production",
+            "PORT": internal_port or "3000",
+        }
+
+    if stack == "python":
+        return {
+            "PYTHONUNBUFFERED": "1",
+            "PORT": internal_port or "8000",
+        }
+
+    return {"APP_URL": public_url}
+
+
+def _load_env_file(file_path: Path) -> dict[str, str]:
+    """Load .env sederhana ke dictionary; abaikan baris invalid/comment."""
+    raw = _read_text_if_exists(file_path)
+    if not raw:
+        return {}
+
+    parsed: dict[str, str] = {}
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        if stripped.startswith("export "):
+            stripped = stripped[len("export ") :].lstrip()
+
+        if "=" not in stripped:
+            continue
+
+        key, value = stripped.split("=", 1)
+        env_key = key.strip()
+        if not env_key:
+            continue
+
+        env_value = value.strip()
+        if len(env_value) >= 2 and env_value[0] == env_value[-1] and env_value[0] in ("'", '"'):
+            env_value = env_value[1:-1]
+        parsed[env_key] = env_value
+
+    return parsed
+
+
+def _normalize_env_vars(env_vars: dict[str, Any] | None) -> dict[str, str]:
+    """Normalisasi env vars input agar semua key/value berbentuk string."""
+    if not env_vars:
+        return {}
+
+    normalized: dict[str, str] = {}
+    for key, value in env_vars.items():
+        env_key = str(key).strip()
+        if not env_key:
+            continue
+        normalized[env_key] = str(value)
+    return normalized
+
+
+def _render_env_file(env_vars: dict[str, str]) -> str:
+    """Render dictionary env vars menjadi format file .env."""
+    lines: list[str] = []
+    for key, value in sorted(env_vars.items()):
+        text = str(value)
+        needs_quote = (text == "") or any(ch.isspace() for ch in text) or "#" in text
+        if needs_quote:
+            escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'{key}="{escaped}"')
+        else:
+            lines.append(f"{key}={text}")
+    return "\n".join(lines).strip() + "\n"
 
 
 def _detect_stack(source_dir: Path) -> dict[str, Any]:
@@ -818,7 +945,7 @@ def deploy_gitlab_app(
     Alur:
     1. Clone/pull repo.
     2. Deteksi stack.
-    3. Generate Dockerfile + compose.
+    3. Generate Dockerfile + compose + .env.
     4. (Opsional) `docker compose up -d --build`.
 
     Catatan auth:
@@ -864,6 +991,21 @@ def deploy_gitlab_app(
     _path_exists_or_raise(source_path, "Source repo_subdir")
 
     detection = _detect_stack(source_path)
+    env_path = app_path / ".env"
+    default_env_vars = _build_default_env_vars(
+        detection=detection,
+        app_name=normalized_name,
+        host=normalized_host,
+        path_prefix=normalized_prefix,
+    )
+    existing_env_vars = _load_env_file(env_path)
+    requested_env_vars = _normalize_env_vars(env_vars)
+    effective_env_vars = {
+        **default_env_vars,
+        **existing_env_vars,
+        **requested_env_vars,
+    }
+
     dockerfile_content = _render_dockerfile(detection, cleaned_subdir)
     compose_content = _render_compose(
         app_name=normalized_name,
@@ -872,7 +1014,7 @@ def deploy_gitlab_app(
         traefik_network=effective_traefik_network,
         traefik_entrypoint=traefik_entrypoint,
         internal_port=detection["internal_port"],
-        env_vars=env_vars,
+        env_vars=effective_env_vars or None,
     )
     dockerignore_content = _render_dockerignore()
 
@@ -890,11 +1032,9 @@ def deploy_gitlab_app(
     dockerignore_path.write_text(dockerignore_content, encoding="utf-8")
     files_written.append(str(dockerignore_path))
 
-    env_path = app_path / ".env"
-    if env_vars:
-        env_body = "\n".join(f"{key}={value}" for key, value in sorted(env_vars.items())) + "\n"
-        env_path.write_text(env_body, encoding="utf-8")
-        files_written.append(str(env_path))
+    env_body = _render_env_file(effective_env_vars)
+    env_path.write_text(env_body, encoding="utf-8")
+    files_written.append(str(env_path))
 
     deploy_log = None
     if run_compose:
@@ -910,6 +1050,8 @@ def deploy_gitlab_app(
         "app_path": str(app_path),
         "source_path": str(source_path),
         "detection": detection,
+        "env_var_count": len(effective_env_vars),
+        "env_default_keys": sorted(default_env_vars.keys()),
         "files_written": files_written,
         "run_compose": run_compose,
         "deploy_log": deploy_log,
@@ -927,6 +1069,10 @@ def deploy_gitlab_app(
                 f"network dipaksa ke '{effective_traefik_network}'."
                 if traefik_network != effective_traefik_network
                 else f"Network Traefik fixed: '{effective_traefik_network}'."
+            ),
+            (
+                "File .env dibuat otomatis berdasarkan deteksi stack; "
+                "prioritas nilai: default stack < .env existing < env_vars input."
             ),
             "Pastikan Traefik berjalan dan terhubung ke network yang sama.",
             "Untuk aplikasi dengan kebutuhan command khusus, override Dockerfile hasil generate.",

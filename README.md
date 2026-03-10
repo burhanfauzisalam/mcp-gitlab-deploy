@@ -10,6 +10,7 @@ MCP server untuk deployment aplikasi dari GitLab ke server menggunakan Docker + 
   Default: `/home/ubuntu/apps/deploy/<app_name>`.
 - Network Traefik app target selalu `web`.
 - Domain (`host`) dan `path_prefix` wajib diisi sebelum deploy.
+- File `.env` app target otomatis dibuat saat deploy berdasarkan hasil deteksi stack.
 - Auto-detection stack:
   - Laravel
   - CodeIgniter 3 / 4
@@ -148,11 +149,16 @@ Input opsional:
 - `repo_subdir`
 - `traefik_network` (tetap ada untuk kompatibilitas, tapi diabaikan; selalu `web`)
 - `traefik_entrypoint` (default `websecure`)
-- `env_vars`
+- `env_vars` (opsional; override nilai `.env` auto-generate)
 - `git_auth_token` (opsional, token repo private HTTPS)
 - `git_auth_username` (default `oauth2`)
 - `run_compose`
 - `force_rebuild`
+
+Catatan `.env` saat deploy:
+
+- `.env` selalu dibuat otomatis sesuai stack/framework yang terdeteksi.
+- Prioritas nilai env: `default stack` < `.env` existing < `env_vars` dari input tool.
 
 ## File penting
 

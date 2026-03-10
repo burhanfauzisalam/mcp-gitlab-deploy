@@ -88,6 +88,16 @@ python -c "from pathlib import Path; from gitlab_deploy_mcp.server import _load_
 python -c "from pathlib import Path; from gitlab_deploy_mcp.server import _read_text_if_exists; print(_read_text_if_exists(Path('README.md'))[:120])"
 ```
 
+- `_build_default_env_vars`:
+```powershell
+python -c "from gitlab_deploy_mcp.server import _build_default_env_vars; print(_build_default_env_vars({'stack':'php','framework':'laravel','internal_port':80}, 'demo', 'apps.example.com', '/demo'))"
+```
+
+- `_render_env_file`:
+```powershell
+python -c "from gitlab_deploy_mcp.server import _render_env_file; print(_render_env_file({'APP_ENV':'production','APP_URL':'https://apps.example.com/demo'}))"
+```
+
 ### Helper detection dan render
 
 - `_detect_stack`:
