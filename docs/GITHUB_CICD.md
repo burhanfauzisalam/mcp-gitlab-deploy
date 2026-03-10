@@ -63,7 +63,7 @@ Deploy flow:
 - `DEPLOY_PATH` (default `/home/<SSH_USER>/apps/gitlab-deploy-mcp`)
 - `TRAEFIK_NETWORK` (default `web`)
 - `TRAEFIK_ENTRYPOINT` (default `websecure`)
-- `TRAEFIK_ROUTER_RULE` (default `PathPrefix(`/gitlab-deploy`)`)
+- `MAIN_DOMAIN` (default `apps.burhanfs.my.id`)
 - `DEPLOYMENT_DATA_DIR` (default `./data/deployments`)
 - `GITLAB_DEPLOYMENT_ROOT` (default `/data/deployments`)
 - `MCP_TRANSPORT` (default `streamable-http`)

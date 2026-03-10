@@ -54,7 +54,7 @@ jobs:
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           TRAEFIK_NETWORK: ${{ vars.TRAEFIK_NETWORK || 'web' }}
           TRAEFIK_ENTRYPOINT: ${{ vars.TRAEFIK_ENTRYPOINT || 'websecure' }}
-          TRAEFIK_ROUTER_RULE: ${{ vars.TRAEFIK_ROUTER_RULE || 'PathPrefix(`/gitlab-deploy`)' }}
+          MAIN_DOMAIN: ${{ vars.MAIN_DOMAIN || 'apps.burhanfs.my.id' }}
           DEPLOYMENT_DATA_DIR: ${{ vars.DEPLOYMENT_DATA_DIR || './data/deployments' }}
           GITLAB_DEPLOYMENT_ROOT: ${{ vars.GITLAB_DEPLOYMENT_ROOT || '/home/ubuntu/apps' }}
           MCP_TRANSPORT: ${{ vars.MCP_TRANSPORT || 'streamable-http' }}

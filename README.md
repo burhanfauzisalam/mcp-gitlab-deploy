@@ -32,7 +32,7 @@ Edit `.env` minimal:
 
 - `TRAEFIK_NETWORK` (network external Traefik, default `web`)
 - `TRAEFIK_ENTRYPOINT` (default `websecure`)
-- `TRAEFIK_ROUTER_RULE` (mis. `Host(`mcp.example.com`)&&PathPrefix(`/gitlab-deploy`)`)
+- `MAIN_DOMAIN` (mis. `apps.example.com`)
 
 ### 2) Build dan jalankan
 
@@ -105,7 +105,7 @@ Variable penting untuk deploy:
 - `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`
 - `SSH_PORT` (opsional, default `22`)
 - `DEPLOY_PATH` (opsional, default `/home/<ssh_user>/apps/gitlab-deploy-mcp`)
-- `TRAEFIK_NETWORK` (default `web`), `TRAEFIK_ENTRYPOINT` (default `websecure`), `TRAEFIK_ROUTER_RULE`
+- `TRAEFIK_NETWORK` (default `web`), `TRAEFIK_ENTRYPOINT` (default `websecure`), `MAIN_DOMAIN`
 - `GITLAB_DEPLOYMENT_ROOT`, `DEPLOYMENT_DATA_DIR`
 - `GITLAB_ACCESS_TOKEN` (opsional, untuk default clone repo private oleh tool runtime)
 
