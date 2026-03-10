@@ -109,7 +109,33 @@ if ! docker_cmd network inspect "$TRAEFIK_NETWORK" >/dev/null 2>&1; then
   docker_cmd network create "$TRAEFIK_NETWORK"
 fi
 
-docker_cmd compose -f docker-compose.traefik.yml up -d --build --remove-orphans
+retry() {
+  max_attempts="$1"
+  delay_seconds="$2"
+  shift 2
+
+  attempt=1
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      echo "Command failed after ${attempt} attempts: $*"
+      return 1
+    fi
+
+    echo "Attempt ${attempt} failed. Retrying in ${delay_seconds}s: $*"
+    attempt=$((attempt + 1))
+    sleep "$delay_seconds"
+  done
+}
+
+# Warm-up pull untuk mengurangi kegagalan TLS timeout sesaat dari Docker Hub.
+retry 5 20 docker_cmd pull python:3.11-slim
+
+retry 5 20 docker_cmd compose -f docker-compose.traefik.yml build --pull
+retry 3 10 docker_cmd compose -f docker-compose.traefik.yml up -d --remove-orphans
 docker_cmd compose -f docker-compose.traefik.yml ps
 EOF
 
