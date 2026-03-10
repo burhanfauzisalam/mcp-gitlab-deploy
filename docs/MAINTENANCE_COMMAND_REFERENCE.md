@@ -17,14 +17,14 @@ $env:PYTHONPATH = "src"
   python -c "from gitlab_deploy_mcp.server import mcp; print(type(mcp).__name__)"
   ```
 
-- `DEFAULT_DEPLOYMENT_ROOT` (turunan env `GITLAB_DEPLOYMENT_ROOT`):
+- `DEFAULT_DEPLOYMENT_ROOT` (turunan env `GITLAB_DEPLOYMENT_ROOT`, fallback `/home/ubuntu/apps/deploy`):
   - Cek nilai default:
   ```powershell
   python -c "from gitlab_deploy_mcp.server import DEFAULT_DEPLOYMENT_ROOT; print(DEFAULT_DEPLOYMENT_ROOT)"
   ```
   - Override value:
   ```powershell
-  $env:GITLAB_DEPLOYMENT_ROOT = "D:/deployments"
+  $env:GITLAB_DEPLOYMENT_ROOT = "/home/ubuntu/apps/deploy"
   python -c "from gitlab_deploy_mcp.server import DEFAULT_DEPLOYMENT_ROOT; print(DEFAULT_DEPLOYMENT_ROOT)"
   ```
 
@@ -102,7 +102,7 @@ python -c "from gitlab_deploy_mcp.server import _render_dockerfile; d={'framewor
 
 - `_render_compose`:
 ```powershell
-python -c "from gitlab_deploy_mcp.server import _render_compose; print(_render_compose('demo','/demo',None,'web','websecure',3000,{'APP_ENV':'prod'}))"
+python -c "from gitlab_deploy_mcp.server import _render_compose; print(_render_compose('demo','/demo','apps.example.com','web','websecure',3000,{'APP_ENV':'prod'}))"
 ```
 
 - `_render_dockerignore`:
@@ -151,12 +151,12 @@ python -c "from gitlab_deploy_mcp.server import detect_tech_stack; print(detect_
 
 - `deploy_gitlab_app` (direct python call):
 ```powershell
-python -c "from gitlab_deploy_mcp.server import deploy_gitlab_app; print(deploy_gitlab_app(repo_url='https://gitlab.com/group/repo.git', app_name='demo', path_prefix='/demo', run_compose=False))"
+python -c "from gitlab_deploy_mcp.server import deploy_gitlab_app; print(deploy_gitlab_app(repo_url='https://gitlab.com/group/repo.git', app_name='demo', host='apps.example.com', path_prefix='/demo', run_compose=False))"
 ```
 
 - `deploy_gitlab_app` (repo private):
 ```powershell
-python -c "from gitlab_deploy_mcp.server import deploy_gitlab_app; print(deploy_gitlab_app(repo_url='https://gitlab.com/group/private-repo.git', app_name='demo', path_prefix='/demo', git_auth_token='glpat-xxx', run_compose=False))"
+python -c "from gitlab_deploy_mcp.server import deploy_gitlab_app; print(deploy_gitlab_app(repo_url='https://gitlab.com/group/private-repo.git', app_name='demo', host='apps.example.com', path_prefix='/demo', git_auth_token='glpat-xxx', run_compose=False))"
 ```
 
 - `main` (entrypoint server):

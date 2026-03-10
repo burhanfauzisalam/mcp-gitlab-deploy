@@ -163,8 +163,12 @@ try:
 except TypeError:
     # Fallback untuk versi SDK yang belum mendukung argumen `transport_security`.
     mcp = FastMCP("gitlab-deploy-mcp")
-# Root default untuk hasil deployment app target (bisa dioverride env).
-DEFAULT_DEPLOYMENT_ROOT = os.getenv("GITLAB_DEPLOYMENT_ROOT", "./deployments")
+# Root deploy persistent default (bisa dioverride via env `GITLAB_DEPLOYMENT_ROOT`).
+PERSISTENT_DEPLOYMENT_ROOT = "/home/ubuntu/apps/deploy"
+# Network Traefik untuk app target selalu fixed ke `web`.
+TRAEFIK_NETWORK_FIXED = "web"
+# Dipertahankan untuk kompatibilitas signature tool, tetap bersumber dari env.
+DEFAULT_DEPLOYMENT_ROOT = os.getenv("GITLAB_DEPLOYMENT_ROOT", PERSISTENT_DEPLOYMENT_ROOT)
 
 
 def _sanitize_text(text: str, redactions: list[str] | None = None) -> str:
@@ -230,6 +234,32 @@ def _normalize_path_prefix(path_prefix: str) -> str:
     if len(value) > 1 and value.endswith("/"):
         value = value[:-1]
     return value
+
+
+def _normalize_deploy_host(host: str) -> str:
+    """Validasi dan normalisasi host/domain untuk rule Traefik."""
+    value = host.strip()
+    if not value:
+        raise ValueError(
+            "host/domain wajib diisi sebelum deploy. "
+            "Tanyakan domain dan path_prefix ke user sebelum menjalankan deploy."
+        )
+
+    parsed = urlsplit(value if "://" in value else f"https://{value}")
+    normalized = (parsed.netloc or parsed.path).strip().strip("/")
+    if not normalized:
+        raise ValueError("host/domain tidak valid.")
+    if "/" in normalized:
+        raise ValueError("host/domain tidak boleh mengandung path.")
+    return normalized
+
+
+def _resolve_persistent_deployment_root() -> Path:
+    """Gunakan root deploy persistent dari env dengan fallback default."""
+    configured_root = os.getenv("GITLAB_DEPLOYMENT_ROOT", PERSISTENT_DEPLOYMENT_ROOT).strip()
+    root_path = Path(configured_root or PERSISTENT_DEPLOYMENT_ROOT).expanduser().resolve()
+    root_path.mkdir(parents=True, exist_ok=True)
+    return root_path
 
 
 def _normalize_mount_path(path: str) -> str:
@@ -530,7 +560,7 @@ def _render_dockerfile(detection: dict[str, Any], repo_subdir: str) -> str:
 def _render_compose(
     app_name: str,
     path_prefix: str,
-    host: str | None,
+    host: str,
     traefik_network: str,
     traefik_entrypoint: str,
     internal_port: int,
@@ -540,10 +570,7 @@ def _render_compose(
     router = app_name
     service = app_name
 
-    if host:
-        rule = f"Host(`{host}`) && PathPrefix(`{path_prefix}`)"
-    else:
-        rule = f"PathPrefix(`{path_prefix}`)"
+    rule = f"Host(`{host}`) && PathPrefix(`{path_prefix}`)"
 
     labels = [
         "- \"traefik.enable=true\"",
@@ -773,12 +800,12 @@ def detect_tech_stack(
 def deploy_gitlab_app(
     repo_url: str,
     app_name: str,
+    host: str,
     path_prefix: str,
     branch: str = "main",
     deployment_root: str = DEFAULT_DEPLOYMENT_ROOT,
     repo_subdir: str = "",
-    host: str | None = None,
-    traefik_network: str = "web",
+    traefik_network: str = TRAEFIK_NETWORK_FIXED,
     traefik_entrypoint: str = "websecure",
     env_vars: dict[str, str] | None = None,
     git_auth_token: str | None = None,
@@ -799,14 +826,20 @@ def deploy_gitlab_app(
       `GITLAB_ACCESS_TOKEN` pada service MCP.
 
     Catatan Traefik:
-    - Default network: `web`
-    - Default entrypoint: `websecure`
+    - `host` (domain) wajib diisi.
+    - `path_prefix` wajib diisi.
+    - Network app target selalu dipaksa ke `web`.
+    - Root deploy selalu dipaksa ke `<GITLAB_DEPLOYMENT_ROOT>/<app_name>`.
+      Default fallback: `/home/ubuntu/apps/deploy/<app_name>`.
+    - Default entrypoint: `websecure`.
     """
 
     normalized_name = _slugify_app_name(app_name)
+    normalized_host = _normalize_deploy_host(host)
     normalized_prefix = _normalize_path_prefix(path_prefix)
-
-    root_path = Path(deployment_root).expanduser().resolve()
+    requested_root = Path(deployment_root).expanduser().resolve()
+    root_path = _resolve_persistent_deployment_root()
+    effective_traefik_network = TRAEFIK_NETWORK_FIXED
     app_path = root_path / normalized_name
     repo_path = app_path / "repo"
 
@@ -835,8 +868,8 @@ def deploy_gitlab_app(
     compose_content = _render_compose(
         app_name=normalized_name,
         path_prefix=normalized_prefix,
-        host=host,
-        traefik_network=traefik_network,
+        host=normalized_host,
+        traefik_network=effective_traefik_network,
         traefik_entrypoint=traefik_entrypoint,
         internal_port=detection["internal_port"],
         env_vars=env_vars,
@@ -869,9 +902,11 @@ def deploy_gitlab_app(
 
     return {
         "app_name": normalized_name,
+        "host": normalized_host,
         "path_prefix": normalized_prefix,
         "branch": branch,
         "deployment_root": str(root_path),
+        "traefik_network": effective_traefik_network,
         "app_path": str(app_path),
         "source_path": str(source_path),
         "detection": detection,
@@ -880,6 +915,19 @@ def deploy_gitlab_app(
         "deploy_log": deploy_log,
         "clone_logs": clone_logs,
         "notes": [
+            "deploy_gitlab_app mewajibkan host/domain dan path_prefix diisi sebelum deploy.",
+            (
+                f"Parameter deployment_root='{requested_root}' diabaikan; "
+                f"root deploy dipaksa ke env GITLAB_DEPLOYMENT_ROOT -> '{root_path}' agar persistent di host."
+                if requested_root != root_path
+                else f"Root deploy persistent: '{root_path}'."
+            ),
+            (
+                f"Parameter traefik_network='{traefik_network}' diabaikan; "
+                f"network dipaksa ke '{effective_traefik_network}'."
+                if traefik_network != effective_traefik_network
+                else f"Network Traefik fixed: '{effective_traefik_network}'."
+            ),
             "Pastikan Traefik berjalan dan terhubung ke network yang sama.",
             "Untuk aplikasi dengan kebutuhan command khusus, override Dockerfile hasil generate.",
         ],

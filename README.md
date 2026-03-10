@@ -6,6 +6,10 @@ MCP server untuk deployment aplikasi dari GitLab ke server menggunakan Docker + 
 
 - Tool `detect_tech_stack` untuk deteksi stack aplikasi.
 - Tool `deploy_gitlab_app` untuk clone/pull repo, deteksi stack, generate artefak Docker + Traefik, lalu deploy.
+- Deploy app target selalu ke folder persistent `<GITLAB_DEPLOYMENT_ROOT>/<app_name>`.
+  Default: `/home/ubuntu/apps/deploy/<app_name>`.
+- Network Traefik app target selalu `web`.
+- Domain (`host`) dan `path_prefix` wajib diisi sebelum deploy.
 - Auto-detection stack:
   - Laravel
   - CodeIgniter 3 / 4
@@ -106,7 +110,8 @@ Variable penting untuk deploy:
 - `SSH_PORT` (opsional, default `22`)
 - `DEPLOY_PATH` (opsional, default `/home/<ssh_user>/apps/gitlab-deploy-mcp`)
 - `TRAEFIK_NETWORK` (default `web`), `TRAEFIK_ENTRYPOINT` (default `websecure`), `MAIN_DOMAIN`
-- `GITLAB_DEPLOYMENT_ROOT`, `DEPLOYMENT_DATA_DIR`
+- `GITLAB_DEPLOYMENT_ROOT` (default `/home/ubuntu/apps/deploy`), `DEPLOYMENT_DATA_DIR`
+  Pastikan `DEPLOYMENT_DATA_DIR` dan `GITLAB_DEPLOYMENT_ROOT` menunjuk path yang sama agar persistent di host.
 - `GITLAB_ACCESS_TOKEN` (opsional, untuk default clone repo private oleh tool runtime)
 - `MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS` (opsional, allowlist Host/Origin untuk endpoint MCP)
 - `MCP_ENABLE_DNS_REBINDING_PROTECTION` (opsional, `true/false`)
@@ -133,15 +138,15 @@ Input utama:
 
 - `repo_url`
 - `app_name`
+- `host` (domain, wajib)
 - `path_prefix` (contoh `/app1`)
 
 Input opsional:
 
 - `branch` (default `main`)
-- `deployment_root` (default dari env `GITLAB_DEPLOYMENT_ROOT`, fallback `./deployments`)
+- `deployment_root` (tetap ada untuk kompatibilitas, tapi diabaikan; gunakan env `GITLAB_DEPLOYMENT_ROOT`)
 - `repo_subdir`
-- `host`
-- `traefik_network` (default `web`)
+- `traefik_network` (tetap ada untuk kompatibilitas, tapi diabaikan; selalu `web`)
 - `traefik_entrypoint` (default `websecure`)
 - `env_vars`
 - `git_auth_token` (opsional, token repo private HTTPS)
