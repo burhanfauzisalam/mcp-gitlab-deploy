@@ -39,13 +39,39 @@ ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/nul
 
 ssh -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$REMOTE_DIR'"
 
-rsync -az --delete \
-  --exclude='.git' \
-  --exclude='.github' \
-  --exclude='.gitlab' \
-  --exclude='.env' \
-  -e "ssh -i $HOME/.ssh/id_ed25519 -p $SSH_PORT" \
-  ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+DEPLOYMENT_DATA_DIR_REL="$(printf '%s' "$DEPLOYMENT_DATA_DIR" | sed 's#^\./##' | sed 's#/$##')"
+DEPLOYMENT_DATA_PARENT="$(dirname "$DEPLOYMENT_DATA_DIR_REL")"
+
+if [ -n "$DEPLOYMENT_DATA_DIR_REL" ] && [ "${DEPLOYMENT_DATA_DIR_REL#/}" = "$DEPLOYMENT_DATA_DIR_REL" ]; then
+  if [ "$DEPLOYMENT_DATA_PARENT" != "." ] && [ "$DEPLOYMENT_DATA_PARENT" != "/" ]; then
+    rsync -az --delete \
+      --filter="P $DEPLOYMENT_DATA_PARENT/" \
+      --filter="P $DEPLOYMENT_DATA_DIR_REL/" \
+      --exclude='.git' \
+      --exclude='.github' \
+      --exclude='.gitlab' \
+      --exclude='.env' \
+      -e "ssh -i $HOME/.ssh/id_ed25519 -p $SSH_PORT" \
+      ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+  else
+    rsync -az --delete \
+      --filter="P $DEPLOYMENT_DATA_DIR_REL/" \
+      --exclude='.git' \
+      --exclude='.github' \
+      --exclude='.gitlab' \
+      --exclude='.env' \
+      -e "ssh -i $HOME/.ssh/id_ed25519 -p $SSH_PORT" \
+      ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+  fi
+else
+  rsync -az --delete \
+    --exclude='.git' \
+    --exclude='.github' \
+    --exclude='.gitlab' \
+    --exclude='.env' \
+    -e "ssh -i $HOME/.ssh/id_ed25519 -p $SSH_PORT" \
+    ./ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+fi
 
 cat > .env.deploy <<EOF
 TRAEFIK_NETWORK=$TRAEFIK_NETWORK

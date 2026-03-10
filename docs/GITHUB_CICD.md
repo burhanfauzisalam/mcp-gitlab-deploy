@@ -43,6 +43,7 @@ Deploy flow:
 - rsync source ke server
 - generate `.env` runtime
 - deploy `docker compose -f docker-compose.traefik.yml up -d --build --remove-orphans`
+- path data persistent (`DEPLOYMENT_DATA_DIR`) diproteksi dari `rsync --delete`
 
 ## GitHub Secrets dan Variables
 
