@@ -1,0 +1,34 @@
+services:
+  gitlab-deploy-mcp:
+    container_name: gitlab-deploy-mcp
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      GITLAB_DEPLOYMENT_ROOT: ${GITLAB_DEPLOYMENT_ROOT:-/data/deployments}
+      MCP_TRANSPORT: ${MCP_TRANSPORT:-streamable-http}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_PORT: ${MCP_PORT:-8000}
+      MCP_STREAMABLE_HTTP_PATH: ${MCP_STREAMABLE_HTTP_PATH:-/mcp}
+      MCP_MOUNT_PATH: ${MCP_MOUNT_PATH:-}
+      MCP_SSE_PATH: ${MCP_SSE_PATH:-/sse}
+      GITLAB_ACCESS_TOKEN: ${GITLAB_ACCESS_TOKEN:-}
+    volumes:
+      - ${DEPLOYMENT_DATA_DIR:-./data/deployments}:/data/deployments
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-web}"
+      - "traefik.http.routers.gitlab-deploy-mcp.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.gitlab-deploy-mcp.rule=${TRAEFIK_ROUTER_RULE:-PathPrefix(`/gitlab-deploy`)}"
+      - "traefik.http.routers.gitlab-deploy-mcp.middlewares=gitlab-deploy-mcp-strip"
+      - "traefik.http.middlewares.gitlab-deploy-mcp-strip.stripprefix.prefixes=/gitlab-deploy"
+      - "traefik.http.services.gitlab-deploy-mcp.loadbalancer.server.port=8000"
+
+networks:
+  web:
+    external: true
+    name: ${TRAEFIK_NETWORK:-web}

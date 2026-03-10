@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gitlab-deploy": {
+      "transport": "streamable-http",
+      "url": "https://example.com/gitlab-deploy/mcp"
+    }
+  }
+}

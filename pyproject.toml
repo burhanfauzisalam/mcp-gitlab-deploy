@@ -1,0 +1,22 @@
+[project]
+name = "gitlab-deploy-mcp"
+version = "0.1.0"
+description = "MCP server for deploying GitLab projects with Docker and Traefik PathPrefix routing"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "mcp>=1.2.0"
+]
+
+[project.scripts]
+gitlab-deploy-mcp = "gitlab_deploy_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

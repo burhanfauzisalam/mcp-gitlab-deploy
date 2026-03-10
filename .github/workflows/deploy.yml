@@ -1,0 +1,69 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy MCP Server
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate required GitHub secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          [ -n "${SSH_HOST:-}" ] || { echo "Missing secret: SSH_HOST"; exit 1; }
+          [ -n "${SSH_USER:-}" ] || { echo "Missing secret: SSH_USER"; exit 1; }
+          [ -n "${SSH_PRIVATE_KEY:-}" ] || { echo "Missing secret: SSH_PRIVATE_KEY"; exit 1; }
+
+      - name: Install runtime dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-client rsync
+
+      - name: Deploy via SSH script
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          TRAEFIK_NETWORK: ${{ vars.TRAEFIK_NETWORK || 'web' }}
+          TRAEFIK_ENTRYPOINT: ${{ vars.TRAEFIK_ENTRYPOINT || 'websecure' }}
+          TRAEFIK_ROUTER_RULE: ${{ vars.TRAEFIK_ROUTER_RULE || 'PathPrefix(`/gitlab-deploy`)' }}
+          DEPLOYMENT_DATA_DIR: ${{ vars.DEPLOYMENT_DATA_DIR || './data/deployments' }}
+          GITLAB_DEPLOYMENT_ROOT: ${{ vars.GITLAB_DEPLOYMENT_ROOT || '/home/ubuntu/apps' }}
+          MCP_TRANSPORT: ${{ vars.MCP_TRANSPORT || 'streamable-http' }}
+          MCP_HOST: ${{ vars.MCP_HOST || '0.0.0.0' }}
+          MCP_PORT: ${{ vars.MCP_PORT || '8000' }}
+          MCP_STREAMABLE_HTTP_PATH: ${{ vars.MCP_STREAMABLE_HTTP_PATH || '/mcp' }}
+          MCP_MOUNT_PATH: ${{ vars.MCP_MOUNT_PATH || '' }}
+          MCP_SSE_PATH: ${{ vars.MCP_SSE_PATH || '/sse' }}
+          GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          sh scripts/ci/deploy_via_ssh.sh
